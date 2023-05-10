@@ -38,12 +38,17 @@ public class PlayerController : MonoBehaviour
     [SerializeField] float jumpForce = 15f;
 
     [Header("Sliding and Dashing")]
-    [SerializeField] float slideForce = 20f;
+    [SerializeField] float slideSpeed = 20f;
+    [SerializeField] float slideDecay = 0.1f;
+    [SerializeField] float slideFallIncrease = 5f;
+    [SerializeField] float slideMovementMultiplier = 0.5f;
+    [SerializeField] float slideFallMultiplier = 1.5f;
     [SerializeField] float dashForce = 30f;
     [SerializeField] float dashTime = 0.2f;
 
     [Header("Jumping and Air Movement")]
     [SerializeField] float airControl = 0.5f;
+    [SerializeField] float maxAirSpeed = 10f;
     [SerializeField] float airDrag = 0.5f;
 
 
@@ -65,8 +70,6 @@ public class PlayerController : MonoBehaviour
         }
 
         lookInput.y = Mathf.Clamp(lookInput.y, -87f, 90f);
-        print(lookInput.y);
-        // lookInput.y = Mathf.Clamp(lookInput.y, -90f, 90f);
 
         cam.transform.localEulerAngles = new Vector3(lookInput.y, 0f, 0f);
         transform.Rotate(Vector3.up * lookInput.x);
@@ -109,7 +112,7 @@ public class PlayerController : MonoBehaviour
         while (state == State.Idle)
         {
             vel.x = 0;
-            vel.y = 0;
+            vel.z = 0;
             SetVelocity();
 
             yield return null;
@@ -141,8 +144,8 @@ public class PlayerController : MonoBehaviour
         while (state == State.Running)
         {
             vel.x = input.x * movmentSpeed;
-            vel.y = input.y * movmentSpeed;
-            vel.z = 0;
+            vel.z = input.y * movmentSpeed;
+            vel.y = 0;
             SetVelocity();
 
             yield return null;
@@ -176,7 +179,7 @@ public class PlayerController : MonoBehaviour
     IEnumerator DashState()
     {
         // Set Velocity
-        vel.x = input.x * dashForce;
+        vel.z = input.x * dashForce;
 
         // Wait dash time
         yield return new WaitForSeconds(dashTime);
@@ -188,31 +191,54 @@ public class PlayerController : MonoBehaviour
 
     IEnumerator SlideState()
     {
-        // Set Velocity
-        vel.x = input.x * slideForce;
-        state = State.Idle;
+        /* Slide State
+        * Enter State when grounded and holding sliding input
+        * Exit state when let go of input or jumping or attacking
+        
+        Behavior:
+        Slides in direction facing when entering state
+        Slide velocity decays over time
 
-        // Hold until let go of input
-        while (sliding)
+        Positive y velocity (Going up) decreases slide velocity
+        Negative y velocity (Falling) increases slide velocity
+
+        Moves slowly in direction of input
+        */
+
+        print("Player State: Slide");
+
+        // Record Direction
+        Vector3 slideDir = transform.forward;
+        slideDir.y = 0;
+
+        // Set Velocity
+        float slideVel = slideSpeed * input.y;
+
+        // Hold until conditions
+        while (state == State.Slide)
         {
-            vel.x = input.x * rb.velocity.x;
-            vel.y = input.y * rb.velocity.z;
-            vel.z = rb.velocity.y;
+            // Set Velocity
+            // Change slide velocity depending on y velocity
+            if (IsGrounded()) slideVel = Mathf.Max(slideVel - rb.velocity.y * slideFallMultiplier * Time.deltaTime, 0);
+
+            // Decay slide velocity
+            slideVel = Mathf.Lerp(slideVel, 0, slideDecay);
+
+            // Set velocity
+            rb.velocity = slideVel * slideDir + Vector3.up * rb.velocity.y;
+
+            // Move slowly in direction of input
+            vel.x = input.x * movmentSpeed * slideMovementMultiplier;
+            vel.z = input.y * movmentSpeed * slideMovementMultiplier;
+            rb.velocity += transform.forward * vel.z + transform.right * vel.x;
+
+
+            rb.velocity -= Vector3.up * slideFallIncrease * Time.deltaTime;
 
             // Check States
             if (!sliding)
             {
                 state = State.Idle;
-                break;
-            }
-            else if (!IsGrounded())
-            {
-                state = State.InAir;
-                break;
-            }
-            else if (input == Vector2.zero)
-            {
-                state = State.Crouch;
                 break;
             }
             else if (jumping && IsGrounded())
@@ -221,7 +247,6 @@ public class PlayerController : MonoBehaviour
                 break;
             }
             yield return null;
-            SetVelocity();
         }
 
         NextState();
@@ -258,8 +283,8 @@ public class PlayerController : MonoBehaviour
     {
         // Set Velocity
         vel.x = input.x * movmentSpeed;
-        vel.y = input.y * movmentSpeed;
-        vel.z = jumpForce;
+        vel.z = input.y * movmentSpeed;
+        vel.y = jumpForce;
         SetVelocity();
 
         yield return null;
@@ -274,11 +299,23 @@ public class PlayerController : MonoBehaviour
         // Enter State
         while (state == State.InAir)
         {
-            vel.x = input.x * movmentSpeed * airControl;
-            vel.y = input.y * movmentSpeed * airControl;
-            vel.z = rb.velocity.y;
-            SetVelocity();
 
+            // Decay velocity
+            vel.x = Mathf.Lerp(vel.x, 0, airDrag);
+            vel.z = Mathf.Lerp(vel.z, 0, airDrag);
+            // vel.x = Mathf.Clamp(rb.velocity.x * airDrag + input.x * movmentSpeed * airControl * Time.deltaTime, -maxAirSpeed, maxAirSpeed);
+            // vel.z = Mathf.Clamp(rb.velocity.z * airDrag * Time.deltaTime + input.y * movmentSpeed * airControl * Time.deltaTime, -maxAirSpeed, maxAirSpeed);
+            if (input.x != 0) vel.x = input.x * movmentSpeed;
+            if (input.y != 0) vel.z = input.y * movmentSpeed;
+
+            vel.y = rb.velocity.y;
+
+            if (sliding)
+            {
+                vel.y = -slideFallIncrease;
+            }
+
+            SetVelocity();
             yield return null;
 
             // Check States
@@ -332,12 +369,25 @@ public class PlayerController : MonoBehaviour
 
     bool IsGrounded()
     {
-        return Physics.Raycast(transform.position, Vector3.down, 1.1f);
+        // Stolen from raycast unity example
+        // Bit shift the index of the layer (6) to get a bit mask (Player layer)
+        int layerMask = 1 << 6;
+
+        // This would cast rays only against colliders in layer 6.
+        // But instead we want to collide against everything except layer 6. The ~ operator does this, it inverts a bitmask.
+        layerMask = ~layerMask;
+
+        return Physics.Raycast(transform.position, Vector3.down, 1.05f, layerMask);
     }
 
     void SetVelocity()
     {
 
-        rb.velocity = transform.forward * vel.y + transform.right * vel.x + transform.up * vel.z;
+        rb.velocity = transform.forward * vel.z + transform.right * vel.x + transform.up * vel.y;
+    }
+    void AddVelocity()
+    {
+
+        rb.velocity += transform.forward * vel.z + transform.right * vel.x + transform.up * vel.y;
     }
 }
