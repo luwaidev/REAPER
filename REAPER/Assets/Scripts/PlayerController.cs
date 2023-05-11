@@ -51,6 +51,11 @@ public class PlayerController : MonoBehaviour
     [SerializeField] float maxAirSpeed = 10f;
     [SerializeField] float airDrag = 0.5f;
 
+    [Header("Wall Running")]
+    [SerializeField] float wallRunSpeed = 10f;
+    [SerializeField] BoxCollider wallRunColliderLeft;
+    [SerializeField] BoxCollider wallRunColliderRight;
+
 
     ////////// INPUTS //////////
 
@@ -309,6 +314,8 @@ public class PlayerController : MonoBehaviour
             if (input.y != 0) vel.z = input.y * movmentSpeed;
 
             vel.y = rb.velocity.y;
+
+            // Check if 
 
             if (sliding)
             {
