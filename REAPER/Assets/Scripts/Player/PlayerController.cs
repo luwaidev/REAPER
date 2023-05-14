@@ -17,6 +17,7 @@ public class PlayerController : MonoBehaviour
     public State state;
     private Vector2 input;
     public Vector3 vel;
+    public bool onWall = false;
 
 
     [FoldoutGroup("Inputs", expanded: false)]
@@ -51,10 +52,15 @@ public class PlayerController : MonoBehaviour
     [SerializeField] float maxAirSpeed = 10f;
     [SerializeField] float airDrag = 0.5f;
 
-    [Header("Wall Running")]
+    [Header("Wall Running and Jumping")]
+    [SerializeField] Vector3 wallContactPosition;
+    [SerializeField] Vector2 wallJumpForce;
     [SerializeField] float wallRunSpeed = 10f;
-    [SerializeField] BoxCollider wallRunColliderLeft;
-    [SerializeField] BoxCollider wallRunColliderRight;
+    [SerializeField] float wallRaycastDist;
+    [SerializeField] Vector3 wallRaycastPos;
+
+
+    public LayerMask wallRunMask;
 
 
     ////////// INPUTS //////////
@@ -82,7 +88,7 @@ public class PlayerController : MonoBehaviour
 
     void OnJump(InputValue value)
     {
-        jumping = value.isPressed;
+        jumping = true;
     }
 
     void OnCrouch(InputValue value)
@@ -118,6 +124,7 @@ public class PlayerController : MonoBehaviour
         {
             vel.x = 0;
             vel.z = 0;
+            vel.y = rb.velocity.y;
             SetVelocity();
 
             yield return null;
@@ -292,7 +299,7 @@ public class PlayerController : MonoBehaviour
         vel.y = jumpForce;
         SetVelocity();
 
-        yield return null;
+        yield return 0.15f;
 
         state = State.InAir;
 
@@ -301,39 +308,102 @@ public class PlayerController : MonoBehaviour
 
     IEnumerator InAirState()
     {
+        /* In Air State
+        * Enter State when not grounded
+        * Exit state when grounded, or wall running, or jumping
+        
+        Behavior:
+        Fall with gravity
+        Move slower in direction of input
+
+        When player is in contact with wall, if jump button is pressed, jump off wall
+        Velocity is added perpendicular to wall and in direction of input
+
+        When player is in contact with wall on left or right, and is holding input in direction of wall and forwards
+        and player is moving at a certain speed, and player is falling:
+        Player will enter wall running state
+         
+        */
+
+        vel = rb.velocity;
         // Enter State
         while (state == State.InAir)
         {
+            Vector3 oVel = vel;
+            // CAN ADD INPUT CURVE
+            float yAccel = input.y * movmentSpeed * airControl * Time.deltaTime;
+            float xAccel = input.x * movmentSpeed * airControl * Time.deltaTime;
+            // Add input velocity
+            vel += transform.forward * yAccel;
+            vel += transform.right * xAccel;
 
-            // Decay velocity
-            vel.x = Mathf.Lerp(vel.x, 0, airDrag);
-            vel.z = Mathf.Lerp(vel.z, 0, airDrag);
+            // If starting from less than movement speed, do not allow
+            // velocity caused by regular movement to exceed movement speed
+            if (Mathf.Abs(new Vector2(oVel.x, oVel.z).magnitude) < movmentSpeed * 1.5f)
+            {
+                vel.x = Mathf.Clamp(vel.x, -movmentSpeed, movmentSpeed);
+                vel.z = Mathf.Clamp(vel.z, -movmentSpeed, movmentSpeed);
+            }
+
+            // Clamp all speed to absolute max airspeed
+            vel.x = Mathf.Clamp(vel.x, -maxAirSpeed, maxAirSpeed);
+            vel.z = Mathf.Clamp(vel.z, -maxAirSpeed, maxAirSpeed);
+
             // vel.x = Mathf.Clamp(rb.velocity.x * airDrag + input.x * movmentSpeed * airControl * Time.deltaTime, -maxAirSpeed, maxAirSpeed);
             // vel.z = Mathf.Clamp(rb.velocity.z * airDrag * Time.deltaTime + input.y * movmentSpeed * airControl * Time.deltaTime, -maxAirSpeed, maxAirSpeed);
-            if (input.x != 0) vel.x = input.x * movmentSpeed;
-            if (input.y != 0) vel.z = input.y * movmentSpeed;
 
             vel.y = rb.velocity.y;
 
-            // Check if 
+            // Wall Jump
+            // Triggered if player is in contact with wall and jump button is pressed
+            if (onWall && jumping)
+            {
+                // Calculate direction away from wall
+                Vector3 wallDir = transform.position - wallContactPosition;
+                wallDir.y = 0;
+
+                print(wallDir.normalized);
+                // Set velocity
+                vel = wallDir.normalized * wallJumpForce.x;
+
+                // Add vertical velocity
+                vel.y = jumpForce;
+            }
+
+            // Wall Run if falling and close to wall
+            if (rb.velocity.y < 0)
+            {
+                // Check if close to walls
+                if (Physics.Raycast(transform.position + wallRaycastPos, transform.right, wallRaycastDist, wallRunMask) ||
+                    Physics.Raycast(transform.position + wallRaycastPos, -transform.right, wallRaycastDist, wallRunMask))
+                {
+                    // IMPLEMENT
+                }
+
+            }
 
             if (sliding)
             {
                 vel.y = -slideFallIncrease;
             }
-
-            SetVelocity();
+            SetActualVelocity();
             yield return null;
 
             // Check States
             if (IsGrounded())
             {
+                print("Player Grounded");
                 state = State.Idle;
                 break;
             }
         }
         // Exit State
         NextState();
+    }
+
+    IEnumerator WallRunState()
+    {
+        yield return null;
     }
     ////////// UNITY FUNCTIONS //////////
     // Start is called before the first frame update
@@ -350,6 +420,57 @@ public class PlayerController : MonoBehaviour
     {
     }
 
+    private void LateUpdate()
+    {
+        // Reset inputs
+        jumping = false;
+    }
+    private void OnCollisionEnter(Collision other)
+    {
+        // print("Collided with " + other.gameObject.name);
+        if (other.gameObject.layer == 7)
+        {
+            // Collided with wall
+            onWall = true;
+            wallContactPosition = other.GetContact(0).point;
+
+        }
+    }
+    private void OnCollisionStay(Collision other)
+    {
+        // print("Collided with " + other.gameObject.name);
+        if (other.gameObject.layer == 7)
+        {
+            // Collided with wall
+            onWall = true;
+            wallContactPosition = other.GetContact(0).point;
+        }
+    }
+    private void OnCollisionExit(Collision other)
+    {
+        // print("Collided with " + other.gameObject.name);
+        if (other.gameObject.layer == 7)
+        {
+            // Collided with wall
+            onWall = false;
+        }
+    }
+
+    private void OnDrawGizmos()
+    {
+        // Gizmos.DrawWireCube(wallRunColliderRight.transform.position, wallRunColliderRight.size / 2);
+        // Gizmos.DrawWireCube(wallRunColliderLeft.transform.position, wallRunColliderLeft.size / 2);
+        Gizmos.DrawLine(transform.position + wallRaycastPos, transform.position + wallRaycastPos + transform.right * wallRaycastDist);
+        Gizmos.DrawLine(transform.position + wallRaycastPos, transform.position + wallRaycastPos - transform.right * wallRaycastDist);
+
+
+        Gizmos.DrawLine(transform.position, transform.position - transform.up * 1.025f);
+
+        if (onWall)
+        {
+            Gizmos.DrawWireSphere(wallContactPosition, 0.1f);
+        }
+    }
     ////////// Functions //////////
     void SetReferences()
     {
@@ -384,17 +505,29 @@ public class PlayerController : MonoBehaviour
         // But instead we want to collide against everything except layer 6. The ~ operator does this, it inverts a bitmask.
         layerMask = ~layerMask;
 
-        return Physics.Raycast(transform.position, Vector3.down, 1.05f, layerMask);
+        return Physics.Raycast(transform.position, Vector3.down, 1.025f, layerMask);
     }
 
     void SetVelocity()
     {
+        if (this.enabled)
+        {
+            rb.velocity = transform.forward * vel.z + transform.right * vel.x + transform.up * vel.y;
+        }
+    }
 
-        rb.velocity = transform.forward * vel.z + transform.right * vel.x + transform.up * vel.y;
+    void SetActualVelocity()
+    {
+        if (this.enabled)
+        {
+            rb.velocity = vel;
+        }
     }
     void AddVelocity()
     {
 
         rb.velocity += transform.forward * vel.z + transform.right * vel.x + transform.up * vel.y;
     }
+
+
 }

@@ -34,7 +34,7 @@
                 },
                 {
                     "name": "Jump",
-                    "type": "PassThrough",
+                    "type": "Button",
                     "id": "160b7721-17df-4ab6-9c7f-37ade9c1d8ce",
                     "expectedControlType": "Button",
                     "processors": "",
@@ -54,6 +54,15 @@
                     "name": "Crouch",
                     "type": "PassThrough",
                     "id": "6ee892a1-55dc-47c2-85f5-05afffb70222",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Grapple",
+                    "type": "Button",
+                    "id": "fbb23cea-3927-4451-b63b-438fd8d8ca20",
                     "expectedControlType": "Button",
                     "processors": "",
                     "interactions": "",
@@ -311,6 +320,17 @@
                     "processors": "",
                     "groups": "Keyboard&Mouse",
                     "action": "Crouch",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "b10a0d46-9fb8-4011-9b29-d7f36a57f00a",
+                    "path": "<Mouse>/rightButton",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard&Mouse",
+                    "action": "Grapple",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }
