@@ -2,25 +2,33 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using Sirenix.OdinInspector;
 
 public class CombatController : MonoBehaviour
 {
-    public enum State { Idle, Grappling } // States
+    public enum State { Idle, Attack, Grappling } // States
 
     [Header("State ")]
     public State state;
-    public PlayerController movement;
+    public MoveController movement;
     public Rigidbody rb;
     public Vector3 vel;
 
     [Header("Inputs")]
+    [SerializeField] bool attack;
     [SerializeField] bool grapple;
 
+
     [Header("Attack")]
-    [SerializeField] float attackDamange;
+    [SerializeField] float attackVelocity;
+    [SerializeField] float attackTime;
+    [SerializeField] int attackDamage;
+    [SerializeField] float attackRange;
+    [SerializeField] LayerMask enemyLayer;
 
     [Header("Grappling")]
     [SerializeField] Transform grappleObject;
+    [SerializeField] LineRenderer grappleLine;
     [SerializeField] float grappleObjSpeed = 10f;
     [SerializeField] float grappleSpeed = 10f;
     [SerializeField] float grappleRange = 100f;
@@ -33,6 +41,7 @@ public class CombatController : MonoBehaviour
     void OnAttack(InputValue value)
     {
         // Attack
+        attack = true;
     }
 
     void OnGrapple(InputValue value)
@@ -67,32 +76,68 @@ public class CombatController : MonoBehaviour
             {
                 state = State.Grappling;
             }
+            if (attack)
+            {
+                state = State.Attack;
+            }
         }
+
         NextState();
     }
 
     IEnumerator AttackState()
     {
-        yield return null;
+        /* Attack State
+         * Enter State when idling and attack button is pressed
+         * Exit state when attack is finished
+         * 
+         * Behavior:
+         * Player moves forward at attackVelocity for attackTime
+         * Player deals attackDamage to enemy if enemy is hit
+         * 
+         * 
+         */
+
+        // Record time
+        float time = 0;
+        while (time < attackTime)
+        {
+            // Move player forward
+            rb.velocity = movement.cam.transform.forward * attackVelocity;
+
+            // Check for collision
+            RaycastHit hit;
+            if (Physics.Raycast(movement.cam.transform.position, movement.cam.transform.forward, out hit, attackRange, enemyLayer))
+            {
+                // If collision is with enemy, damage enemy
+                hit.collider.gameObject.GetComponent<EnemyInterface>().OnHit(attackDamage);
+            }
+
+            // ADD COMBOS HERE
+            time += Time.deltaTime;
+            yield return null;
+        }
+
+        state = State.Idle;
         NextState();
     }
 
     IEnumerator GrapplingState()
     {
         /* Grapple State
-        * Enter State when not grounded
-        * Exit state when grounded, or wall running, or jumping
+        * Enter State when idling and grapple button is pressed
+        * Exit state when grapple doesn't hit anything, or player is close to grapple object, or time is exceeded
         
         Behavior:
-        Fall with gravity
-        Move slower in direction of input
+        grapple object moves towards direction looking when entering state
+        The grapple object stops when it hits a wall
+        if grapple object hits enemy, damage enemy
 
-        When player is in contact with wall, if jump button is pressed, jump off wall
-        Velocity is added perpendicular to wall and in direction of input
+        If grapple object does not hit a wall within range, stop grapple, exit state
+        Otherwise continue
 
-        When player is in contact with wall on left or right, and is holding input in direction of wall and forwards
-        and player is moving at a certain speed, and player is falling:
-        Player will enter wall running state
+        Then, player moves towards grapple object
+        TODO CONTINUE
          
         */
 
@@ -104,10 +149,16 @@ public class CombatController : MonoBehaviour
 
         bool found = false;
 
+        grappleObject.position = movement.cam.transform.position;
         // Move grapple object\
         while (Vector3.Distance(start, grappleObject.position) < grappleRange)
         {
             grappleObject.position += direction * grappleObjSpeed * Time.deltaTime;
+
+            // Set line renderer to grapple object position
+            grappleLine.SetPosition(0, transform.position);
+            grappleLine.SetPosition(1, grappleObject.position);
+
             yield return null;
 
             // Check for collision
@@ -141,6 +192,10 @@ public class CombatController : MonoBehaviour
         // If no grapple position, stop grapple
         if (!found)
         {
+            // Hide grapple line
+            grappleLine.SetPosition(0, Vector3.zero);
+            grappleLine.SetPosition(1, Vector3.zero);
+
             state = State.Idle;
             NextState();
             yield break;
@@ -160,14 +215,29 @@ public class CombatController : MonoBehaviour
         // Once player is close to grapple object, or time is exceeded, stop grapple
         while (!grapple && Vector3.Distance(transform.position, grappleObject.position) > grappleCancelDistance && time < maxGrappleTime)
         {
+
             print("Grappling");
             // Move player towards grapple object
             vel = Vector3.Lerp(vel, (grappleObject.position - transform.position).normalized * grappleSpeed, 0.125f);
             time += Time.deltaTime;
 
+            // Add input movement
+            vel += movement.cam.transform.forward * movement.input.y * movement.movmentSpeed * Time.deltaTime;
+
             rb.velocity = vel;
+
+            // Set line renderer to grapple object position
+            grappleLine.SetPosition(0, transform.position);
+            grappleLine.SetPosition(1, grappleObject.position);
             yield return null;
         }
+
+
+        // Hide grapple line
+        grappleLine.SetPosition(0, Vector3.zero);
+        grappleLine.SetPosition(1, Vector3.zero);
+
+        yield return new WaitForSeconds(0.1f);
 
         // Enable player movement
         movement.enabled = true;
@@ -179,7 +249,7 @@ public class CombatController : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        movement = GetComponent<PlayerController>();
+        movement = GetComponent<MoveController>();
         NextState();
     }
 
@@ -188,12 +258,19 @@ public class CombatController : MonoBehaviour
     {
         if (state != State.Grappling)
         {
-            grappleObject.position = transform.position;
+            grappleObject.position = movement.cam.transform.position;
         }
     }
 
     void LateUpdate()
     {
         grapple = false;
+        attack = false;
+    }
+
+    void OnDrawGizmos()
+    {
+        Gizmos.color = Color.red;
+        Gizmos.DrawRay(movement.cam.transform.position, movement.cam.transform.forward * attackRange);
     }
 }
