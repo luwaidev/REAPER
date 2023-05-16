@@ -220,7 +220,7 @@ public class CombatController : MonoBehaviour
         float grappleDist = Vector3.Distance(grappleObject.position, transform.position);
 
         // Add starting pull speed
-        // rb.velocity += new Vector3(grappleDir.x, 0, grappleDir.z).normalized * startingPullSpeed.x + Vector3.up * startingPullSpeed.y;
+        rb.velocity += new Vector3(grappleDir.x, 0, grappleDir.z).normalized * startingPullSpeed.x + Vector3.up * startingPullSpeed.y;
 
         // Set spring joint object
         SpringJoint joint = gameObject.AddComponent<SpringJoint>();
@@ -241,36 +241,16 @@ public class CombatController : MonoBehaviour
         // Move player towards grapple object
         while (!grapple)
         {
-            // // Calculate grapple direction and distance
-            // grappleDir = (grappleObject.position - transform.position).normalized;
-            // grappleDist = (grappleObject.position - transform.position).magnitude;
-
-            // print("Grappling");
-            // // lerp = rb.velocity.y < 0 ? Mathf.Lerp(lerp, grapplePullLerpConstraints.y, 0.01f) : Mathf.Lerp(lerp, grapplePullLerpConstraints.x, 0.01f);
-            // // Move player towards grapple object, with speed based on distance
-            // vel += Vector3.Lerp(vel, grappleDir * grapplePullSpeed + grappleDir * grappleDist * grappleDistMultiplier, grapplePullLerp) * Time.deltaTime;
-            // vel.x = 0;
-            // vel.z = 0;
-            // // Add input movement
-            // // vel += movement.cam.transform.forward * movement.input.y * movement.movmentSpeed * Time.deltaTime;
-
-            // // Add gravity
-            // vel -= Vector3.down * Physics.gravity.y * Time.deltaTime;
-
-            // // Change velocity based on y direction
-            // // vel -= new Vector3(vel.x, 0, vel.z).normalized * vel.y * grappleYmultiplier * Time.deltaTime;
-
-            // rb.velocity = vel;
-
-            // Add velocity for movement
-            // rb.AddForce(movement.input * movement.movmentSpeed * grappleAirControl * transform.forward);
-
             // Set line renderer to grapple object position
             grappleLine.SetPosition(0, transform.position);
             grappleLine.SetPosition(1, grappleObject.position);
 
             yield return null;
         }
+
+        // Conserve Velocity
+        // Set player velocity to grapple velocity
+        movement.vel = rb.velocity;
 
         // Destroy spring joint
         Destroy(joint);

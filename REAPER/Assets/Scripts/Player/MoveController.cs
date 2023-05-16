@@ -558,7 +558,7 @@ public class MoveController : MonoBehaviour
         // But instead we want to collide against everything except layer 6. The ~ operator does this, it inverts a bitmask.
         layerMask = ~layerMask;
 
-        return Physics.Raycast(transform.position, Vector3.down, 1.025f, layerMask);
+        return Physics.Raycast(transform.position, Vector3.down, 1f, layerMask);
     }
 
     void SetVelocity()
