@@ -29,11 +29,19 @@ public class CombatController : MonoBehaviour
     [Header("Grappling")]
     [SerializeField] Transform grappleObject;
     [SerializeField] LineRenderer grappleLine;
+    [SerializeField] float grappleAirControl = 0.2f;
     [SerializeField] float grappleObjSpeed = 10f;
-    [SerializeField] float grappleSpeed = 10f;
+    [SerializeField] float grapplePullSpeed = 10f;
+    [SerializeField] Vector2 startingPullSpeed = new Vector2(10f, 10f);
+    [SerializeField] float grapplePullLerp = 0.125f;
     [SerializeField] float grappleRange = 100f;
-    [SerializeField] float maxGrappleTime = 100f;
     [SerializeField] float grappleCancelDistance = 1f;
+
+    [Header("Spring Joint Settings")]
+    [SerializeField] Vector2 sprintJointMinMaxDistance = new Vector2(0.25f, 0.7f);
+    [SerializeField] float springJointSpring = 4.5f;
+    [SerializeField] float springJointDamper = 7f;
+    [SerializeField] float springJointMassScale = 4.5f;
 
     ////////// INPUT //////////
 
@@ -206,32 +214,66 @@ public class CombatController : MonoBehaviour
         // Disable player movement
         movement.enabled = false;
 
-        // Record time
-        float time = 0;
-
         vel = rb.velocity;
 
+        Vector3 grappleDir = (grappleObject.position - transform.position).normalized;
+        float grappleDist = Vector3.Distance(grappleObject.position, transform.position);
+
+        // Add starting pull speed
+        // rb.velocity += new Vector3(grappleDir.x, 0, grappleDir.z).normalized * startingPullSpeed.x + Vector3.up * startingPullSpeed.y;
+
+        // Set spring joint object
+        SpringJoint joint = gameObject.AddComponent<SpringJoint>();
+        joint.autoConfigureConnectedAnchor = false;
+        joint.connectedAnchor = grappleObject.position;
+        joint.anchor = new Vector3(0, -0.3f, 0);
+
+        joint.maxDistance = grappleDist * sprintJointMinMaxDistance.y;
+        joint.minDistance = grappleDist * sprintJointMinMaxDistance.x;
+
+        joint.spring = springJointSpring;
+        joint.damper = springJointDamper;
+        joint.massScale = springJointMassScale;
+
+        // Set movement state to in air
+        movement.state = MoveController.State.InAir;
+
         // Move player towards grapple object
-        // Once player is close to grapple object, or time is exceeded, stop grapple
-        while (!grapple && Vector3.Distance(transform.position, grappleObject.position) > grappleCancelDistance && time < maxGrappleTime)
+        while (!grapple)
         {
+            // // Calculate grapple direction and distance
+            // grappleDir = (grappleObject.position - transform.position).normalized;
+            // grappleDist = (grappleObject.position - transform.position).magnitude;
 
-            print("Grappling");
-            // Move player towards grapple object
-            vel = Vector3.Lerp(vel, (grappleObject.position - transform.position).normalized * grappleSpeed, 0.125f);
-            time += Time.deltaTime;
+            // print("Grappling");
+            // // lerp = rb.velocity.y < 0 ? Mathf.Lerp(lerp, grapplePullLerpConstraints.y, 0.01f) : Mathf.Lerp(lerp, grapplePullLerpConstraints.x, 0.01f);
+            // // Move player towards grapple object, with speed based on distance
+            // vel += Vector3.Lerp(vel, grappleDir * grapplePullSpeed + grappleDir * grappleDist * grappleDistMultiplier, grapplePullLerp) * Time.deltaTime;
+            // vel.x = 0;
+            // vel.z = 0;
+            // // Add input movement
+            // // vel += movement.cam.transform.forward * movement.input.y * movement.movmentSpeed * Time.deltaTime;
 
-            // Add input movement
-            vel += movement.cam.transform.forward * movement.input.y * movement.movmentSpeed * Time.deltaTime;
+            // // Add gravity
+            // vel -= Vector3.down * Physics.gravity.y * Time.deltaTime;
 
-            rb.velocity = vel;
+            // // Change velocity based on y direction
+            // // vel -= new Vector3(vel.x, 0, vel.z).normalized * vel.y * grappleYmultiplier * Time.deltaTime;
+
+            // rb.velocity = vel;
+
+            // Add velocity for movement
+            // rb.AddForce(movement.input * movement.movmentSpeed * grappleAirControl * transform.forward);
 
             // Set line renderer to grapple object position
             grappleLine.SetPosition(0, transform.position);
             grappleLine.SetPosition(1, grappleObject.position);
+
             yield return null;
         }
 
+        // Destroy spring joint
+        Destroy(joint);
 
         // Hide grapple line
         grappleLine.SetPosition(0, Vector3.zero);

@@ -18,6 +18,7 @@ public class MoveController : MonoBehaviour
     public Vector2 input;
     public Vector3 vel;
     public bool onWall = false;
+    public int stamina;
 
 
     [FoldoutGroup("Inputs", expanded: false)]
@@ -60,6 +61,7 @@ public class MoveController : MonoBehaviour
     [SerializeField] float wallSlideFall = -8;
     [SerializeField] float wallRaycastDist;
     [SerializeField] Vector3 wallRaycastPos;
+    [SerializeField] int maxStamina;
 
 
     public LayerMask wallRunMask;
@@ -74,15 +76,20 @@ public class MoveController : MonoBehaviour
 
     void OnLook(InputValue value)
     {
+        Vector2 v = value.Get<Vector2>();
         // Handle look input
-        Vector2 lookInput = value.Get<Vector2>() * mouseSens * Time.deltaTime * sensModifier;
+        Vector2 lookInput = v * mouseSens * Time.deltaTime * sensModifier;
         lookInput.y = cam.transform.localEulerAngles.x - lookInput.y;
         if (lookInput.y > 270)
         {
             lookInput.y = lookInput.y - 360;
         }
 
-        lookInput.y = Mathf.Clamp(lookInput.y, -87f, 90f);
+        if (lookInput.y > 90f)
+        {
+            lookInput.y = -90f;
+        }
+        lookInput.y = Mathf.Clamp(lookInput.y, -90f, 90f);
 
         cam.transform.localEulerAngles = new Vector3(lookInput.y, 0f, 0f);
         transform.Rotate(Vector3.up * lookInput.x);
@@ -100,7 +107,11 @@ public class MoveController : MonoBehaviour
 
     void OnDash(InputValue value)
     {
-        state = State.Dash;
+        if (stamina > 0)
+        {
+            state = State.Dash;
+            stamina--;
+        }
     }
 
     ////////// STATES //////////
@@ -128,6 +139,9 @@ public class MoveController : MonoBehaviour
             vel.z = 0;
             vel.y = rb.velocity.y;
             SetVelocity();
+
+            // Set Stamina to max
+            stamina = maxStamina;
 
             yield return null;
 
@@ -161,6 +175,9 @@ public class MoveController : MonoBehaviour
             vel.z = input.y * movmentSpeed;
             vel.y = 0;
             SetVelocity();
+
+            // Set Stamina to max
+            stamina = maxStamina;
 
             yield return null;
 
@@ -200,7 +217,8 @@ public class MoveController : MonoBehaviour
         // Wait dash time
         yield return new WaitForSeconds(dashTime);
 
-        state = State.Idle;
+        if (IsGrounded()) state = State.Idle;
+        else state = State.InAir;
 
         NextState();
     }
@@ -250,6 +268,9 @@ public class MoveController : MonoBehaviour
 
 
             rb.velocity -= Vector3.up * slideFallIncrease * Time.deltaTime;
+
+            // Set Stamina to max
+            stamina = maxStamina;
 
             // Check States
             if (!sliding)
@@ -303,7 +324,7 @@ public class MoveController : MonoBehaviour
         vel.y = jumpForce;
         SetVelocity();
 
-        yield return 0.15f;
+        yield return 0.25f;
 
         state = State.InAir;
 
@@ -330,11 +351,12 @@ public class MoveController : MonoBehaviour
         */
 
         vel = rb.velocity;
+        int wallJumpCount = 0;
+
         // Enter State
         while (state == State.InAir)
         {
             Vector3 oVel = vel;
-            int wallJumpCount = 0;
 
             // CAN ADD INPUT CURVE
             float yAccel = input.y * movmentSpeed * airControl * Time.deltaTime;
@@ -386,10 +408,13 @@ public class MoveController : MonoBehaviour
                 float inputAngle = Mathf.Atan2(input.y, input.x) * Mathf.Rad2Deg;
                 float angleToWall = transform.eulerAngles.y - (Mathf.Atan2(wallContactPosition.z - transform.position.z, wallContactPosition.x - transform.position.x) * Mathf.Rad2Deg);
 
+                // WALL SLIDING
                 // Triggered if player is in contact with wall holding input in wall direction
-                if (Mathf.Abs(inputAngle - angleToWall) < 45)
+                if ((Mathf.Clamp(Mathf.Abs(inputAngle - angleToWall), 0, 360) - 180) < 45 && vel.y < 0)
                 {
-                    print("Wall Sliding");
+                    // When wall sliding, don't use air acceleration 
+                    vel = (input.x * transform.right + input.y * transform.forward) * movmentSpeed;
+
                     // Set velocity
                     vel.y = wallSlideFall;
                 }
@@ -407,14 +432,14 @@ public class MoveController : MonoBehaviour
                 }
             }
 
+            // Stomping
+            // if (sliding)
+            // {
+            //     vel.y = -slideFallIncrease;
+            // }
 
-
-
-            if (sliding)
-            {
-                vel.y = -slideFallIncrease;
-            }
             SetActualVelocity();
+
             yield return null;
 
             // Check States
