@@ -32,12 +32,16 @@ public class MoveController : MonoBehaviour
     [SerializeField] float mouseSens;
 
     [Space(10)]
-    [Header("Movement Settings")]
+    [Title("Movement Settings")]
     [Space(10)]
+
 
     [Header("Running and Jumping")]
     public float movmentSpeed = 10f;
     [SerializeField] float jumpForce = 15f;
+    [SerializeField] Vector2 ledgeDetectionPosition;
+    [SerializeField] Vector2 ledgeJumpVelocity;
+    float ledgeDetectionDist = 0.8f;
 
     [Header("Sliding and Dashing")]
     [SerializeField] float slideSpeed = 20f;
@@ -53,18 +57,22 @@ public class MoveController : MonoBehaviour
     [SerializeField] float maxAirSpeed = 10f;
     [SerializeField] float airDrag = 0.5f;
 
-    [Header("Wall Running and Jumping")]
-    [SerializeField] int maxWallJumps;
+    [TitleGroup("Wall Interaction")]
+    [Space(10)]
     [SerializeField] Vector3 wallContactPosition;
-    [SerializeField] Vector2 wallJumpForce;
-    [SerializeField] float wallRunSpeed = 10f;
-    [SerializeField] float wallSlideFall = -8;
-    [SerializeField] float wallRaycastDist;
-    [SerializeField] Vector3 wallRaycastPos;
     [SerializeField] int maxStamina;
-
-
     public LayerMask wallRunMask;
+
+    [Header("Wall Jumping")]
+    [SerializeField] int maxWallJumps;
+    [SerializeField] Vector2 wallJumpForce;
+    [SerializeField] float wallSlideFall = -8;
+
+    [Header("Wall Running")]
+    [SerializeField] float wallRunTriggerSpeed = 10f;
+    [SerializeField] float wallRunSpeed = 12f;
+
+
 
 
     ////////// INPUTS //////////
@@ -352,7 +360,6 @@ public class MoveController : MonoBehaviour
 
         vel = rb.velocity;
         int wallJumpCount = 0;
-
         // Enter State
         while (state == State.InAir)
         {
@@ -386,7 +393,7 @@ public class MoveController : MonoBehaviour
             // Wall Behaviour
             if (onWall)
             {
-                // Wall Jump
+                // WALL JUMPING
                 // Triggered if player is in contact with wall and jump button is pressed
                 if (jumping && wallJumpCount < maxWallJumps)
                 {
@@ -402,34 +409,62 @@ public class MoveController : MonoBehaviour
 
                     wallJumpCount++;
                 }
-                // Wall Slide
+
+                // LEDGE CLIMBING
+                // Trigger if there is a ledge in front of player, player is holding forwards button, and player touching wall
+                // Raycast to check if there is a ledge in front of player
+                // A ledge exists if there is a wall at ledgeDetectionPosition.y relative to player, but no wall at ledgeDetectionPosition.x
+                bool upper = Physics.Raycast(transform.position + transform.up * ledgeDetectionPosition.y, transform.forward, ledgeDetectionDist, wallRunMask);
+                bool lower = Physics.Raycast(transform.position + transform.up * ledgeDetectionPosition.x, transform.forward, ledgeDetectionDist, wallRunMask);
+                if (upper && !lower)
+                {
+                    Debug.Log("Player Ledge Jump");
+                    // Add vertical velocity
+                    vel.y = ledgeJumpVelocity.y;
+                }
+
+                // WALL SLIDING/RUNNING
 
                 // Caculate input angle and angle to wall
                 float inputAngle = Mathf.Atan2(input.y, input.x) * Mathf.Rad2Deg;
                 float angleToWall = transform.eulerAngles.y - (Mathf.Atan2(wallContactPosition.z - transform.position.z, wallContactPosition.x - transform.position.x) * Mathf.Rad2Deg);
 
-                // WALL SLIDING
+                // WALL RUNNING AND SLIDING
                 // Triggered if player is in contact with wall holding input in wall direction
                 if ((Mathf.Clamp(Mathf.Abs(inputAngle - angleToWall), 0, 360) - 180) < 45 && vel.y < 0)
                 {
+                    // WALL SLIDING
+                    // Player slides down at a slower velocity 
                     // When wall sliding, don't use air acceleration 
                     vel = (input.x * transform.right + input.y * transform.forward) * movmentSpeed;
 
                     // Set velocity
                     vel.y = wallSlideFall;
-                }
 
-                // Wall Run if falling and close to wall
-                if (rb.velocity.y < 0)
-                {
-                    // Check if close to walls
-                    if (Physics.Raycast(transform.position + wallRaycastPos, transform.right, wallRaycastDist, wallRunMask) ||
-                        Physics.Raycast(transform.position + wallRaycastPos, -transform.right, wallRaycastDist, wallRunMask))
+                    // WALL RUNNING
+                    // If player reaches requirements for wall running
+                    // Wall Run if moving faster than required distance and pressing wall input
+                    if (input.y > 0 && new Vector2(rb.velocity.x, rb.velocity.z).magnitude > wallRunTriggerSpeed)
                     {
-                        // IMPLEMENT
-                    }
+                        // VELOCITY CHANGES HERE OVERRIDE ALL OTHER VELOCITY CHANGES MADE PREVIOUSLY
+                        Debug.Log("Wall Running");
 
+                        // remove y velocity
+                        vel.y = 0;
+
+                        // Add wall run velocity
+                        // Calculate wall run direction
+                        // Wall run direction is perpendicular direction of wall direction
+                        // Vector3 wallRunDir = new Vector3(wallContactPosition.z - transform.position.z, 0, transform.position.x - wallContactPosition.x).normalized;\
+                        // nvm might be too complicated
+
+
+                        // Move at wall run speed
+                        vel = (input.x * transform.right + input.y * transform.forward) * wallRunSpeed;
+                    }
                 }
+
+
             }
 
             // Stomping
@@ -511,14 +546,15 @@ public class MoveController : MonoBehaviour
 
     private void OnDrawGizmos()
     {
-        // Gizmos.DrawWireCube(wallRunColliderRight.transform.position, wallRunColliderRight.size / 2);
-        // Gizmos.DrawWireCube(wallRunColliderLeft.transform.position, wallRunColliderLeft.size / 2);
-        Gizmos.DrawLine(transform.position + wallRaycastPos, transform.position + wallRaycastPos + transform.right * wallRaycastDist);
-        Gizmos.DrawLine(transform.position + wallRaycastPos, transform.position + wallRaycastPos - transform.right * wallRaycastDist);
 
-
+        // GROUND DETECTION RAYCAST
         Gizmos.DrawLine(transform.position, transform.position - transform.up * 1.025f);
 
+        // LEDGE DETECTION RAYCASTS
+        Gizmos.DrawLine(transform.position + transform.up * ledgeDetectionPosition.y, transform.position + transform.up * ledgeDetectionPosition.y + transform.forward * ledgeDetectionDist);
+        Gizmos.DrawLine(transform.position + transform.up * ledgeDetectionPosition.x, transform.position + transform.up * ledgeDetectionPosition.x + transform.forward * ledgeDetectionDist);
+
+        // WALL HIT POSITION RAYCAST
         if (onWall)
         {
             Gizmos.DrawWireSphere(wallContactPosition, 0.1f);
@@ -558,7 +594,7 @@ public class MoveController : MonoBehaviour
         // But instead we want to collide against everything except layer 6. The ~ operator does this, it inverts a bitmask.
         layerMask = ~layerMask;
 
-        return Physics.Raycast(transform.position, Vector3.down, 1f, layerMask);
+        return Physics.Raycast(transform.position, Vector3.down, 1.025f, layerMask);
     }
 
     void SetVelocity()
