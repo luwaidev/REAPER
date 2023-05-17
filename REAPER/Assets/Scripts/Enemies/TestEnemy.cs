@@ -6,6 +6,7 @@ public class TestEnemy : MonoBehaviour, EnemyInterface
 {
 
     public MeshRenderer meshRenderer;
+    public bool destroySelf;
     // Start is called before the first frame update
     void Start()
     {
@@ -23,6 +24,10 @@ public class TestEnemy : MonoBehaviour, EnemyInterface
         yield return new WaitForSeconds(0.1f);
 
         meshRenderer.material.color = Color.gray;
+        if (destroySelf)
+        {
+            Destroy(gameObject);
+        }
     }
 
     public void OnHit(int damage)

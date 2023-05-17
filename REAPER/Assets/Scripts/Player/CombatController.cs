@@ -16,14 +16,15 @@ public class CombatController : MonoBehaviour
 
     [Header("Inputs")]
     [SerializeField] bool attack;
-    [SerializeField] bool grapple;
-
+    [SerializeField] bool grappling;
+    [SerializeField] float grappleInputTime = 0.2f;
 
     [Header("Attack")]
     [SerializeField] float attackVelocity;
     [SerializeField] float attackTime;
     [SerializeField] int attackDamage;
     [SerializeField] float attackRange;
+    [SerializeField] float damageRange = 0.5f;
     [SerializeField] LayerMask enemyLayer;
 
     [Header("Grappling")]
@@ -55,7 +56,7 @@ public class CombatController : MonoBehaviour
     void OnGrapple(InputValue value)
     {
         // Grapple
-        grapple = true;
+        grappling = !grappling;
     }
 
     ////////// STATES //////////
@@ -80,7 +81,7 @@ public class CombatController : MonoBehaviour
         {
             // Do nothing
             yield return null;
-            if (grapple)
+            if (grappling)
             {
                 state = State.Grappling;
             }
@@ -108,23 +109,52 @@ public class CombatController : MonoBehaviour
 
         // Record time
         float time = 0;
+        RaycastHit hit = new RaycastHit();
+        bool found = false;
+
+        // Lock player movement
+        movement.enabled = false;
+
         while (time < attackTime)
         {
             // Move player forward
             rb.velocity = movement.cam.transform.forward * attackVelocity;
 
             // Check for collision
-            RaycastHit hit;
             if (Physics.Raycast(movement.cam.transform.position, movement.cam.transform.forward, out hit, attackRange, enemyLayer))
             {
-                // If collision is with enemy, damage enemy
-                hit.collider.gameObject.GetComponent<EnemyInterface>().OnHit(attackDamage);
+                // If collision is with enemy, mark enemy as hit
+                found = true;
+
+                break;
             }
 
             // ADD COMBOS HERE
             time += Time.deltaTime;
             yield return null;
         }
+
+        // IF ENEMY IS FOUND
+        // Move towards enemy, and once in range deal damage and exit state
+        while (found)
+        {
+            print("attacking");
+            // Move player towards enemy
+            rb.velocity = (hit.collider.gameObject.transform.position - transform.position).normalized * attackVelocity;
+
+            // Lock camera?
+
+            // If in range, deal damage and exit state
+            if (Vector3.Distance(transform.position, hit.collider.gameObject.transform.position) < damageRange)
+            {
+                hit.collider.gameObject.GetComponent<EnemyInterface>().OnHit(attackDamage);
+                break;
+            }
+            yield return null;
+        }
+
+        // Reenable player movement
+        movement.enabled = true;
 
         state = State.Idle;
         NextState();
@@ -159,7 +189,7 @@ public class CombatController : MonoBehaviour
 
         grappleObject.position = movement.cam.transform.position;
         // Move grapple object\
-        while (Vector3.Distance(start, grappleObject.position) < grappleRange)
+        while (grappling && Vector3.Distance(start, grappleObject.position) < grappleRange)
         {
             grappleObject.position += direction * grappleObjSpeed * Time.deltaTime;
 
@@ -209,7 +239,9 @@ public class CombatController : MonoBehaviour
             yield break;
         }
 
-        // THIS WILL RUN IF A GRAPPLE OBJECT IS FOUND 
+        // IF PLAYER HITS ENEMY
+
+        // IF PLAYER HITS GRAPPLE OBJECT
 
         // Disable player movement
         movement.enabled = false;
@@ -239,13 +271,45 @@ public class CombatController : MonoBehaviour
         movement.state = MoveController.State.InAir;
 
         // Move player towards grapple object
-        while (!grapple)
+        while (grappling)
         {
             // Set line renderer to grapple object position
             grappleLine.SetPosition(0, transform.position);
             grappleLine.SetPosition(1, grappleObject.position);
 
             yield return null;
+
+        }
+
+        // Check if player double tapped to pull
+        float time = 0;
+        while (time < grappleInputTime)
+        {
+            time += Time.deltaTime;
+            if (grappling)
+            {
+                // Pull player towards grapple object
+                break;
+            }
+            yield return null;
+        }
+
+
+        if (time < grappleInputTime)
+        {
+            // Pull player towards grapple object
+            while (grappling && Vector3.Distance(transform.position, grappleObject.position) > grappleCancelDistance)
+            {
+                // Set line renderer to grapple object position
+                grappleLine.SetPosition(0, transform.position);
+                grappleLine.SetPosition(1, grappleObject.position);
+
+                // Move player towards grapple object
+                rb.velocity = (grappleObject.position - transform.position).normalized * grapplePullSpeed;
+                print(rb.velocity);
+
+                yield return null;
+            }
         }
 
         // Conserve Velocity
@@ -286,7 +350,6 @@ public class CombatController : MonoBehaviour
 
     void LateUpdate()
     {
-        grapple = false;
         attack = false;
     }
 

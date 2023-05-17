@@ -61,7 +61,7 @@
                 },
                 {
                     "name": "Grapple",
-                    "type": "Button",
+                    "type": "PassThrough",
                     "id": "fbb23cea-3927-4451-b63b-438fd8d8ca20",
                     "expectedControlType": "Button",
                     "processors": "",
