@@ -11,6 +11,7 @@ public class MoveController : MonoBehaviour
     public Rigidbody rb;
     public Animator anim;
     public Transform cam;
+    public CameraController camController;
 
     public enum State { Idle, Running, Dash, InAir, Jumping, Slide, Crouch, Dead } // Player movement state
     [Header("State ")]
@@ -37,7 +38,7 @@ public class MoveController : MonoBehaviour
 
 
     [Header("Running and Jumping")]
-    public float movmentSpeed = 10f;
+    public float movementSpeed = 10f;
     [SerializeField] float jumpForce = 15f;
     [SerializeField] Vector2 ledgeDetectionPosition;
     [SerializeField] Vector2 ledgeJumpVelocity;
@@ -82,26 +83,26 @@ public class MoveController : MonoBehaviour
         input = value.Get<Vector2>();
     }
 
-    void OnLook(InputValue value)
-    {
-        Vector2 v = value.Get<Vector2>();
-        // Handle look input
-        Vector2 lookInput = v * mouseSens * Time.deltaTime * sensModifier;
-        lookInput.y = cam.transform.localEulerAngles.x - lookInput.y;
-        if (lookInput.y > 270)
-        {
-            lookInput.y = lookInput.y - 360;
-        }
+    // void OnLook(InputValue value)
+    // {
+    //     Vector2 v = value.Get<Vector2>();
+    //     // Handle look input
+    //     Vector2 lookInput = v * mouseSens * Time.deltaTime * sensModifier;
+    //     lookInput.y = cam.transform.localEulerAngles.x - lookInput.y;
+    //     if (lookInput.y > 270)
+    //     {
+    //         lookInput.y = lookInput.y - 360;
+    //     }
 
-        if (lookInput.y > 90f)
-        {
-            lookInput.y = -90f;
-        }
-        lookInput.y = Mathf.Clamp(lookInput.y, -90f, 90f);
+    //     if (lookInput.y > 90f)
+    //     {
+    //         lookInput.y = -90f;
+    //     }
+    //     lookInput.y = Mathf.Clamp(lookInput.y, -90f, 90f);
 
-        cam.transform.localEulerAngles = new Vector3(lookInput.y, 0f, 0f);
-        transform.Rotate(Vector3.up * lookInput.x);
-    }
+    //     cam.transform.localEulerAngles = new Vector3(lookInput.y, 0f, 0f);
+    //     transform.Rotate(Vector3.up * lookInput.x);
+    // }
 
     void OnJump(InputValue value)
     {
@@ -179,8 +180,8 @@ public class MoveController : MonoBehaviour
         // Enter State
         while (state == State.Running)
         {
-            vel.x = input.x * movmentSpeed;
-            vel.z = input.y * movmentSpeed;
+            vel.x = input.x * movementSpeed;
+            vel.z = input.y * movementSpeed;
             vel.y = 0;
             SetVelocity();
 
@@ -270,8 +271,8 @@ public class MoveController : MonoBehaviour
             rb.velocity = slideVel * slideDir + Vector3.up * rb.velocity.y;
 
             // Move slowly in direction of input
-            vel.x = input.x * movmentSpeed * slideMovementMultiplier;
-            vel.z = input.y * movmentSpeed * slideMovementMultiplier;
+            vel.x = input.x * movementSpeed * slideMovementMultiplier;
+            vel.z = input.y * movementSpeed * slideMovementMultiplier;
             rb.velocity += transform.forward * vel.z + transform.right * vel.x;
 
 
@@ -327,8 +328,8 @@ public class MoveController : MonoBehaviour
     IEnumerator JumpingState()
     {
         // Set Velocity
-        vel.x = input.x * movmentSpeed;
-        vel.z = input.y * movmentSpeed;
+        vel.x = input.x * movementSpeed;
+        vel.z = input.y * movementSpeed;
         vel.y = jumpForce;
         SetVelocity();
 
@@ -373,27 +374,27 @@ public class MoveController : MonoBehaviour
             Vector3 oVel = vel;
 
             // CAN ADD INPUT CURVE
-            float yAccel = input.y * movmentSpeed * airControl * Time.deltaTime;
-            float xAccel = input.x * movmentSpeed * airControl * Time.deltaTime;
+            float yAccel = input.y * movementSpeed * airControl * Time.deltaTime;
+            float xAccel = input.x * movementSpeed * airControl * Time.deltaTime;
             // Add input velocity
             vel += transform.forward * yAccel;
             vel += transform.right * xAccel;
 
             // If starting from less than movement speed, do not allow
             // velocity caused by regular movement to exceed movement speed
-            if (Mathf.Abs(new Vector2(oVel.x, oVel.z).magnitude) < movmentSpeed * 1.5f)
+            if (Mathf.Abs(new Vector2(oVel.x, oVel.z).magnitude) < movementSpeed * 1.5f)
             {
-                vel = Vector3.ClampMagnitude(vel, movmentSpeed);
-                // vel.x = Mathf.Clamp(vel.x, -movmentSpeed, movmentSpeed);
-                // vel.z = Mathf.Clamp(vel.z, -movmentSpeed, movmentSpeed);
+                vel = Vector3.ClampMagnitude(vel, movementSpeed);
+                // vel.x = Mathf.Clamp(vel.x, -movementSpeed, movementSpeed);
+                // vel.z = Mathf.Clamp(vel.z, -movementSpeed, movementSpeed);
             }
 
             // Clamp all speed to absolute max airspeed
             vel.x = Mathf.Clamp(vel.x, -maxAirSpeed, maxAirSpeed);
             vel.z = Mathf.Clamp(vel.z, -maxAirSpeed, maxAirSpeed);
 
-            // vel.x = Mathf.Clamp(rb.velocity.x * airDrag + input.x * movmentSpeed * airControl * Time.deltaTime, -maxAirSpeed, maxAirSpeed);
-            // vel.z = Mathf.Clamp(rb.velocity.z * airDrag * Time.deltaTime + input.y * movmentSpeed * airControl * Time.deltaTime, -maxAirSpeed, maxAirSpeed);
+            // vel.x = Mathf.Clamp(rb.velocity.x * airDrag + input.x * movementSpeed * airControl * Time.deltaTime, -maxAirSpeed, maxAirSpeed);
+            // vel.z = Mathf.Clamp(rb.velocity.z * airDrag * Time.deltaTime + input.y * movementSpeed * airControl * Time.deltaTime, -maxAirSpeed, maxAirSpeed);
 
             vel.y = rb.velocity.y;
 
@@ -445,7 +446,7 @@ public class MoveController : MonoBehaviour
                     ///// WALL SLIDING /////
                     // Player slides down at a slower velocity 
                     // When wall sliding, don't use air acceleration 
-                    vel = (input.x * transform.right + input.y * transform.forward) * movmentSpeed;
+                    vel = (input.x * transform.right + input.y * transform.forward) * movementSpeed;
 
                     // Set velocity
                     vel.y = wallSlideFall;
@@ -499,7 +500,7 @@ public class MoveController : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-
+        cam = Camera.main.transform;
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
         NextState();
@@ -508,6 +509,15 @@ public class MoveController : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
+        // Camera Tilting
+        if (input.x != 0 && input.y == 0)
+        {
+            camController.Tilt(1, (int)Mathf.Round(input.x));
+        }
+        else
+        {
+            camController.Tilt(0, 0);
+        }
     }
 
     private void LateUpdate()
